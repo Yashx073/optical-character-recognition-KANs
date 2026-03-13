@@ -1,0 +1,12 @@
+streamlit
+tensorflow
+numpy
+opencv-python
+pandas
+seaborn
+matplotlib
+scikit-learn
+torch
+pyyaml
+tqdm
+git+https://github.com/KindXiaoming/pykan.git

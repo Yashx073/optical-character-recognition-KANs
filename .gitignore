@@ -1,0 +1,44 @@
+# Python cache/build
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and local runtime files
+*.log
+
+# Data artifacts
+*.csv
+*.zip
+*.rar
+*.mat
+
+# Trained model artifacts
+models/*.h5
+models/*.keras
+models/*.pt
+models/*.pth
+
+# Local project assets (large/unversioned)
+Major Project photos/
