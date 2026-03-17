@@ -1,4 +1,4 @@
-# Core dependencies for the OCR KAN project
+w# Core dependencies for the OCR KAN project
 streamlit
 tensorflow
 numpy
@@ -11,4 +11,3 @@ torch
 pyyaml
 tqdm
 git+https://github.com/KindXiaoming/pykan.git
-# deg
