@@ -41,44 +41,115 @@ class KANLayer(tf.keras.layers.Layer):
         return config
 
 
+SCRIPT_CONFIGS = {
+    "English (A–Z)": {
+        "model_prefix": "",
+        "title": "English (A–Z)",
+    },
+    "Devanagari": {
+        "model_prefix": "devanagari_",
+        "title": "Devanagari",
+    },
+}
+
+
+def list_class_dirs(path):
+    if not os.path.isdir(path):
+        return []
+
+    folders = [name for name in os.listdir(path) if os.path.isdir(os.path.join(path, name))]
+    numeric_folders = [folder for folder in folders if folder.isdigit()]
+    return sorted(numeric_folders, key=lambda value: int(value))
+
+
+def load_labels(script_name):
+    if script_name == "English (A–Z)":
+        return [chr(index + 65) for index in range(26)]
+
+    label_files = [
+        os.path.join("models", "devanagari_labels.txt"),
+        os.path.join("DEVNAGARI_NEW", "labels.txt"),
+    ]
+    for label_file in label_files:
+        if os.path.exists(label_file):
+            with open(label_file, "r", encoding="utf-8") as label_handle:
+                labels = [line.strip() for line in label_handle if line.strip()]
+            if labels:
+                return labels
+
+    train_class_dirs = list_class_dirs(os.path.join("DEVNAGARI_NEW", "TRAIN"))
+    if train_class_dirs:
+        return [f"Class {folder}" for folder in train_class_dirs]
+
+    return []
+
+
+def model_path_candidates(model_prefix, base_name):
+    return [
+        os.path.join("models", f"{model_prefix}{base_name}.h5"),
+        os.path.join("models", f"{model_prefix}{base_name}.keras"),
+    ]
+
+
 # ==========================================
 # 2️⃣ Streamlit UI Setup
 # ==========================================
-st.set_page_config(page_title="OCR Character Recognition (A–Z)", layout="centered")
-st.title("🔠 Optical Character Recognition (A–Z)")
+st.set_page_config(page_title="OCR Character Recognition", layout="centered")
+st.title("🔠 Optical Character Recognition")
 st.write("Upload a handwritten character image to test CNN, RNN, and CNN+KAN models.")
+
+script_name = st.selectbox("📝 Select script", list(SCRIPT_CONFIGS.keys()))
+class_labels = load_labels(script_name)
+
+if script_name == "Devanagari":
+    if class_labels and class_labels[0].startswith("Class "):
+        st.info("ℹ️ Using folder-based class labels for Devanagari (Class 1, Class 2, ...). Add `models/devanagari_labels.txt` for exact character names.")
+    elif not class_labels:
+        st.warning("⚠️ No Devanagari class labels found. Add `models/devanagari_labels.txt` or keep dataset folders in `DEVNAGARI_NEW/TRAIN/`.")
+
+st.caption(f"Active script: {SCRIPT_CONFIGS[script_name]['title']}")
 
 # ==========================================
 # 3️⃣ Load Models Safely with Custom Scope
 # ==========================================
 @st.cache_resource
-def load_all_models():
+def load_all_models(script_name):
     models_dict = {}
+    model_prefix = SCRIPT_CONFIGS[script_name]["model_prefix"]
 
-    def safe_load_model(name, path, custom_objects=None):
+    def safe_load_model(name, paths, custom_objects=None):
+        model_path = next((path for path in paths if os.path.exists(path)), None)
+        if model_path is None:
+            st.warning(f"⚠️ Could not find {name} model file. Checked: {', '.join(paths)}")
+            return None
+
         try:
             if custom_objects:
                 with custom_object_scope(custom_objects):
-                    model = tf.keras.models.load_model(path, compile=False)
+                    model = tf.keras.models.load_model(model_path, compile=False)
             else:
-                model = tf.keras.models.load_model(path, compile=False)
-            st.success(f"✅ {name} model loaded: {os.path.basename(path)}")
+                model = tf.keras.models.load_model(model_path, compile=False)
+            st.success(f"✅ {name} model loaded: {os.path.basename(model_path)}")
             return model
         except Exception as e:
-            st.warning(f"⚠️ Could not load {name} model ({path}): {e}")
+            st.warning(f"⚠️ Could not load {name} model ({model_path}): {e}")
             return None
 
-    # Paths
-    cnn_path = os.path.join("models", "cls_deneme_model.h5")
-    rnn_path = os.path.join("models", "rnn_ocr_model.h5")
-    feat_path = os.path.join("models", "feature_extractor.h5")
-    kan_path = os.path.join("models", "kan_model.h5")
+    if script_name == "English (A–Z)":
+        cnn_candidates = [os.path.join("models", "cls_deneme_model.h5"), os.path.join("models", "cls_deneme_model.keras"), os.path.join("models", "cnn_model.h5"), os.path.join("models", "cnn_model.keras")]
+        rnn_candidates = model_path_candidates(model_prefix, "rnn_ocr_model")
+    else:
+        cnn_candidates = model_path_candidates(model_prefix, "cnn_model")
+        rnn_candidates = model_path_candidates(model_prefix, "rnn_model")
+
+    feat_candidates = model_path_candidates(model_prefix, "feature_extractor")
+    kan_candidates = model_path_candidates(model_prefix, "kan_model")
 
     # Load models
-    models_dict["CNN"] = safe_load_model("CNN", cnn_path)
-    models_dict["RNN"] = safe_load_model("RNN", rnn_path)
-    feature_extractor = safe_load_model("Feature Extractor", feat_path)
-    kan_model = safe_load_model("KAN Classifier", kan_path, {"KANLayer": KANLayer})
+    models_dict["CNN"] = safe_load_model("CNN", cnn_candidates)
+    models_dict["RNN"] = safe_load_model("RNN", rnn_candidates)
+    feature_extractor = safe_load_model("Feature Extractor", feat_candidates)
+    kan_model = safe_load_model("KAN Classifier", kan_candidates, {"KANLayer": KANLayer})
 
     if feature_extractor and kan_model:
         models_dict["CNN+KAN"] = (feature_extractor, kan_model)
@@ -86,13 +157,23 @@ def load_all_models():
     return models_dict
 
 
-models_dict = load_all_models()
+models_dict = load_all_models(script_name)
 st.write("---")
 
 # ==========================================
 # 4️⃣ Upload and Preprocess Image (MNIST Style)
 # ==========================================
 uploaded_file = st.file_uploader("📤 Upload a handwritten character image", type=["png", "jpg", "jpeg"])
+
+
+def decode_prediction(pred, labels):
+    class_index = int(np.argmax(pred, axis=1)[0])
+    confidence = float(np.max(pred))
+    if 0 <= class_index < len(labels):
+        label = labels[class_index]
+    else:
+        label = f"Class {class_index}"
+    return label, confidence
 
 if uploaded_file is not None:
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
@@ -128,24 +209,18 @@ if uploaded_file is not None:
     def predict_cnn(model, img):
         x = img.reshape(1, 28, 28, 1)
         pred = model.predict(x, verbose=0)
-        label = np.argmax(pred, axis=1)[0]
-        conf = np.max(pred)
-        return chr(label + 65), conf
+        return decode_prediction(pred, class_labels)
 
     def predict_rnn(model, img):
         x = img.reshape(1, 28, 28)
         pred = model.predict(x, verbose=0)
-        label = np.argmax(pred, axis=1)[0]
-        conf = np.max(pred)
-        return chr(label + 65), conf
+        return decode_prediction(pred, class_labels)
 
     def predict_cnn_kan(feature_extractor, kan_model, img):
         x = img.reshape(1, 28, 28, 1)
         features = feature_extractor.predict(x, verbose=0)
         pred = kan_model.predict(features, verbose=0)
-        label = np.argmax(pred, axis=1)[0]
-        conf = np.max(pred)
-        return chr(label + 65), conf
+        return decode_prediction(pred, class_labels)
 
     # ==========================================
     # 6️⃣ Run Predictions
