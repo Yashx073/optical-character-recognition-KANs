@@ -21,11 +21,14 @@ It includes:
   - `rnn_ocr_model.h5` / `rnn_ocr_model.keras` (RNN)
   - `feature_extractor.h5` + `kan_model.h5` (CNN+KAN pipeline)
   - optional Devanagari model files:
-    - `devanagari_cnn_model.h5` / `.keras`
-    - `devanagari_rnn_model.h5` / `.keras`
-    - `devanagari_feature_extractor.h5` / `.keras`
-    - `devanagari_kan_model.h5` / `.keras`
+    - `devanagari_cnn_model.h5`
+    - `devanagari_rnn_model.h5`
+    - `devanagari_feature_extractor.h5`
+    - `devanagari_kan_model.h5`
     - `devanagari_labels.txt`
+  - KAN notebook artifacts:
+    - `cnn_model.keras`, `feature_extractor.keras`, `kan_model.keras`
+    - `kan_calibration.npz`
 - **Training / experimentation notebooks**:
   - `OCR.ipynb`
   - `test.ipynb`
@@ -95,7 +98,7 @@ pip install git+https://github.com/KindXiaoming/pykan.git
 From the project root:
 
 ```bash
-prime-run streamlit run app.py
+streamlit run app.py
 ```
 
 Then open the local URL shown in the terminal (typically `http://localhost:8501`).
@@ -121,7 +124,7 @@ DEVNAGARI_NEW/
 Train all Devanagari models (CNN, RNN, and CNN+KAN):
 
 ```bash
-prime-run python train_devanagari.py --data-dir DEVNAGARI_NEW --cnn-epochs 10 --rnn-epochs 10 --kan-epochs 12
+python train_devanagari.py --data-dir DEVNAGARI_NEW --cnn-epochs 10 --rnn-epochs 10 --kan-epochs 12
 ```
 
 This saves:
@@ -132,6 +135,15 @@ This saves:
 - `models/devanagari_labels.txt`
 
 In the Streamlit app, select **Devanagari** from the script dropdown. The app will automatically use these files when available.
+
+---
+
+## Current status
+
+- ✅ `app.py` supports script switching (**English (A–Z)** / **Devanagari**) and loads both `.h5` and `.keras` model files when available.
+- ✅ `train_devanagari.py` trains CNN, RNN, and CNN+KAN models and exports Devanagari artifacts used by the app.
+- ✅ `kan.ipynb` contains improved CNN+KAN training with calibration/rejection logic and exports `.keras` models + calibration settings.
+- ℹ️ On this Linux setup, TensorFlow currently falls back to CPU with the warning `Cannot dlopen some GPU libraries`; training still runs successfully.
 
 ---
 
