@@ -5,6 +5,136 @@ import cv2
 import os
 from tensorflow.keras.utils import custom_object_scope
 
+
+def inject_styles():
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Manrope:wght@400;600;700&display=swap');
+
+        .stApp {
+            background:
+                radial-gradient(1200px 500px at 15% -10%, rgba(14, 165, 233, 0.20), transparent 60%),
+                radial-gradient(1000px 450px at 85% 0%, rgba(34, 197, 94, 0.18), transparent 60%),
+                linear-gradient(180deg, #020617 0%, #0B1220 55%, #0A101C 100%);
+            color: #E5E7EB;
+        }
+
+        h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            letter-spacing: 0.2px;
+        }
+
+        body, p, li, .stMarkdown, .stCaption, .stAlert {
+            font-family: 'Manrope', sans-serif;
+        }
+
+        .hero {
+            padding: 1.1rem 1.2rem;
+            border-radius: 14px;
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.18), rgba(34, 197, 94, 0.14));
+            box-shadow: 0 12px 24px rgba(2, 6, 23, 0.28);
+            margin-bottom: 0.8rem;
+        }
+
+        .hero-title {
+            margin: 0;
+            font-size: 2rem;
+            line-height: 1.15;
+            color: #F8FAFC;
+            font-weight: 700;
+        }
+
+        .hero-subtitle {
+            margin: 0.55rem 0 0 0;
+            color: #CBD5E1;
+            font-size: 0.99rem;
+        }
+
+        .section-label {
+            margin: 1.1rem 0 0.5rem 0;
+            color: #93C5FD;
+            font-size: 0.86rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 700;
+        }
+
+        .meta-chip {
+            display: inline-block;
+            margin-top: 0.35rem;
+            padding: 0.36rem 0.65rem;
+            border-radius: 999px;
+            background: rgba(30, 41, 59, 0.65);
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            color: #BFDBFE;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .result-card {
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            background: linear-gradient(160deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.9));
+            padding: 0.8rem 0.85rem;
+            margin-bottom: 0.55rem;
+            box-shadow: 0 6px 16px rgba(2, 6, 23, 0.25);
+        }
+
+        .result-model {
+            color: #7DD3FC;
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin: 0;
+            font-weight: 700;
+        }
+
+        .result-pred {
+            color: #F8FAFC;
+            margin: 0.22rem 0;
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+
+        .result-conf {
+            margin: 0;
+            color: #86EFAC;
+            font-size: 0.86rem;
+            font-weight: 600;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_header():
+    st.markdown(
+        """
+        <div class="hero">
+            <h1 class="hero-title">Optical Character Recognition Studio</h1>
+            <p class="hero-subtitle">Upload a handwritten character to compare CNN, RNN, and CNN+KAN predictions in one place.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_result_cards(results):
+    for model_name, label, confidence in results:
+        st.markdown(
+            f"""
+            <div class="result-card">
+                <p class="result-model">{model_name}</p>
+                <p class="result-pred">Prediction: {label}</p>
+                <p class="result-conf">Confidence: {confidence * 100:.2f}%</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
 # ==========================================
 # 1️⃣ Define KANLayer (Fixed for Serialization)
 # ==========================================
@@ -95,19 +225,22 @@ def model_path_candidates(model_prefix, base_name):
 # 2️⃣ Streamlit UI Setup
 # ==========================================
 st.set_page_config(page_title="OCR Character Recognition", layout="centered")
-st.title("🔠 Optical Character Recognition")
-st.write("Upload a handwritten character image to test CNN, RNN, and CNN+KAN models.")
+inject_styles()
+render_header()
 
+st.markdown('<p class="section-label">Script Selection</p>', unsafe_allow_html=True)
 script_name = st.selectbox("📝 Select script", list(SCRIPT_CONFIGS.keys()))
 class_labels = load_labels(script_name)
 
 if script_name == "Devanagari":
-    if class_labels and class_labels[0].startswith("Class "):
-        st.info("ℹ️ Using folder-based class labels for Devanagari (Class 1, Class 2, ...). Add `models/devanagari_labels.txt` for exact character names.")
-    elif not class_labels:
+    if not class_labels:
         st.warning("⚠️ No Devanagari class labels found. Add `models/devanagari_labels.txt` or keep dataset folders in `DEVNAGARI_NEW/TRAIN/`.")
 
 st.caption(f"Active script: {SCRIPT_CONFIGS[script_name]['title']}")
+st.markdown(
+    f'<span class="meta-chip">Active Script: {SCRIPT_CONFIGS[script_name]["title"]}</span>',
+    unsafe_allow_html=True,
+)
 
 # ==========================================
 # 3️⃣ Load Models Safely with Custom Scope
@@ -129,7 +262,6 @@ def load_all_models(script_name):
                     model = tf.keras.models.load_model(model_path, compile=False)
             else:
                 model = tf.keras.models.load_model(model_path, compile=False)
-            st.success(f"✅ {name} model loaded: {os.path.basename(model_path)}")
             return model
         except Exception as e:
             st.warning(f"⚠️ Could not load {name} model ({model_path}): {e}")
@@ -163,6 +295,7 @@ st.write("---")
 # ==========================================
 # 4️⃣ Upload and Preprocess Image (MNIST Style)
 # ==========================================
+st.markdown('<p class="section-label">Input Image</p>', unsafe_allow_html=True)
 uploaded_file = st.file_uploader("📤 Upload a handwritten character image", type=["png", "jpg", "jpeg"])
 
 
@@ -200,7 +333,13 @@ if uploaded_file is not None:
     if np.mean(img_norm) > 0.5:
         img_norm = 1 - img_norm
 
-    st.image(img, caption="🖼️ Preprocessed (MNIST-style) Image", width=150)
+    preview_col, note_col = st.columns([1.1, 1.3])
+    with preview_col:
+        st.image(img, caption="Preprocessed (MNIST-style) Image", width=170)
+    with note_col:
+        st.markdown('<p class="section-label">Preprocessing</p>', unsafe_allow_html=True)
+        st.caption("Resized to 28x28, denoised, thresholded, and normalized for model inference.")
+
     st.write("---")
 
     # ==========================================
@@ -225,7 +364,7 @@ if uploaded_file is not None:
     # ==========================================
     # 6️⃣ Run Predictions
     # ==========================================
-    st.subheader("📊 Model Predictions")
+    st.markdown('<p class="section-label">Model Predictions</p>', unsafe_allow_html=True)
     results = []
 
     try:
@@ -254,9 +393,7 @@ if uploaded_file is not None:
     # 7️⃣ Show Results
     # ==========================================
     if results:
-        st.success("✅ Predictions:")
-        for name, label, conf in results:
-            st.write(f"**{name}** → Predicted: `{label}` | Confidence: `{conf*100:.2f}%`")
+        render_result_cards(results)
     else:
         st.warning("⚠️ No predictions could be made. Check if models are loaded correctly.")
 else:
