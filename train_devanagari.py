@@ -1,5 +1,7 @@
 import argparse
+import json
 import os
+import time
 from typing import List, Tuple
 
 import cv2
@@ -172,10 +174,38 @@ def build_kan_model(input_dim: int, num_classes: int, learning_rate: float) -> t
 
 def evaluate_model(model: tf.keras.Model, x_test: np.ndarray, y_test: np.ndarray, model_name: str) -> None:
     if x_test is None or y_test is None:
-        return
+        return None, None
 
     test_loss, test_accuracy = model.evaluate(x_test, y_test, verbose=0)
     print(f"{model_name} test accuracy: {test_accuracy:.4f} | test loss: {test_loss:.4f}")
+    return float(test_loss), float(test_accuracy)
+
+
+def save_training_log(
+    output_dir: str,
+    model_key: str,
+    history: tf.keras.callbacks.History,
+    training_seconds: float,
+    param_count: int,
+    test_loss: float,
+    test_accuracy: float,
+) -> None:
+    logs_dir = os.path.join(output_dir, "training_logs")
+    os.makedirs(logs_dir, exist_ok=True)
+
+    payload = {
+        "model": model_key,
+        "epochs": int(len(history.history.get("loss", []))),
+        "training_seconds": float(training_seconds),
+        "param_count": int(param_count),
+        "test_loss": None if test_loss is None else float(test_loss),
+        "test_accuracy": None if test_accuracy is None else float(test_accuracy),
+        "history": history.history,
+    }
+
+    out_path = os.path.join(logs_dir, f"{model_key}_history.json")
+    with open(out_path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2)
 
 
 def save_labels(output_path: str, class_folders: List[str]) -> None:
@@ -231,7 +261,8 @@ def main() -> None:
     print("\nTraining CNN model...")
     cnn_model = build_cnn_model(num_classes=num_classes, learning_rate=args.learning_rate)
     cnn_model.summary()
-    cnn_model.fit(
+    start = time.time()
+    cnn_history = cnn_model.fit(
         x_train,
         y_train,
         epochs=args.cnn_epochs,
@@ -240,12 +271,14 @@ def main() -> None:
         callbacks=callbacks,
         verbose=1,
     )
-    evaluate_model(cnn_model, x_test, y_test, "CNN")
+    cnn_train_seconds = time.time() - start
+    cnn_test_loss, cnn_test_acc = evaluate_model(cnn_model, x_test, y_test, "CNN")
 
     print("\nTraining RNN model...")
     rnn_model = build_rnn_model(num_classes=num_classes, learning_rate=args.learning_rate)
     rnn_model.summary()
-    rnn_model.fit(
+    start = time.time()
+    rnn_history = rnn_model.fit(
         x_train.reshape(-1, 28, 28),
         y_train,
         epochs=args.rnn_epochs,
@@ -254,7 +287,8 @@ def main() -> None:
         callbacks=callbacks,
         verbose=1,
     )
-    evaluate_model(
+    rnn_train_seconds = time.time() - start
+    rnn_test_loss, rnn_test_acc = evaluate_model(
         rnn_model,
         None if x_test is None else x_test.reshape(-1, 28, 28),
         y_test,
@@ -283,7 +317,8 @@ def main() -> None:
         learning_rate=args.learning_rate,
     )
     kan_model.summary()
-    kan_model.fit(
+    start = time.time()
+    kan_history = kan_model.fit(
         x_train_kan,
         y_train_kan,
         epochs=args.kan_epochs,
@@ -292,10 +327,12 @@ def main() -> None:
         callbacks=callbacks,
         verbose=1,
     )
+    kan_train_seconds = time.time() - start
 
+    kan_test_loss, kan_test_acc = None, None
     if x_test is not None and y_test is not None:
         test_features = feature_extractor.predict(x_test, batch_size=256, verbose=0)
-        evaluate_model(kan_model, test_features, y_test, "KAN")
+        kan_test_loss, kan_test_acc = evaluate_model(kan_model, test_features, y_test, "KAN")
 
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -311,12 +348,41 @@ def main() -> None:
     kan_model.save(kan_model_path)
     save_labels(labels_path, class_folders)
 
+    save_training_log(
+        args.output_dir,
+        "cnn",
+        cnn_history,
+        cnn_train_seconds,
+        cnn_model.count_params(),
+        cnn_test_loss,
+        cnn_test_acc,
+    )
+    save_training_log(
+        args.output_dir,
+        "rnn",
+        rnn_history,
+        rnn_train_seconds,
+        rnn_model.count_params(),
+        rnn_test_loss,
+        rnn_test_acc,
+    )
+    save_training_log(
+        args.output_dir,
+        "kan",
+        kan_history,
+        kan_train_seconds,
+        kan_model.count_params(),
+        kan_test_loss,
+        kan_test_acc,
+    )
+
     print("\nSaved Devanagari artifacts:")
     print(f"- {cnn_model_path}")
     print(f"- {rnn_model_path}")
     print(f"- {feature_extractor_path}")
     print(f"- {kan_model_path}")
     print(f"- {labels_path}")
+    print(f"- {os.path.join(args.output_dir, 'training_logs')}")
 
 
 if __name__ == "__main__":
